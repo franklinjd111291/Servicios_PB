@@ -1,0 +1,6 @@
+streamlit
+pandas
+openpyxl
+python-calamine
+st-gsheets-connection
+fpdf2
