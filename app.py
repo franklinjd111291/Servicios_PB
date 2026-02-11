@@ -5,28 +5,22 @@ import os
 from datetime import datetime, timedelta
 from fpdf import FPDF
 
-# 1. Configuración de página CON LOGO PERSONALIZADO
-# Asegúrate de que 'banfield.ico' esté en la misma carpeta.
+# 1. Configuración de página (Con logo y manejo de errores)
 try:
-    st.set_page_config(page_title="Servicios de PB por Vencer", layout="wide", page_icon="banfield.ico")
+    st.set_page_config(page_title="Servicios de PB Banfield México", layout="wide", page_icon="banfield.ico")
 except:
-    # Si no encuentra la imagen, usa un emoji por defecto para que no falle
     st.set_page_config(page_title="Loop Gestión Banfield", layout="wide", page_icon="🐾")
 
 # --- CONEXIÓN A GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- CARGA TURBO CON CALAMINE ---
 @st.cache_data(ttl=10)
 def load_data():
     file = 'servicios por vencer 2026-1.xlsx'
-    # Motor Calamine para lectura ultra rápida
+    # Motor Calamine
     df_s = pd.read_excel(file, sheet_name='Servicios Loop', engine='calamine')
-    
-    # Estandarización de nombres
     df_s = df_s.rename(columns={'Fecha Fin': 'Fecha de Vencimiento', 'Nivel': 'Nivel de PB'})
     
-    # Crear base única de clientes
     cols_base = ['No de PB', 'Mascota', 'Propietario', 'Fecha de Vencimiento', 'Nivel de PB']
     df_base = df_s[cols_base].drop_duplicates(subset=['No de PB'])
     
@@ -36,13 +30,11 @@ def load_data():
     
     return df_base, df_s
 
-# --- GENERADOR DE PDF ---
 def generar_pdf(df_print):
     pdf = FPDF()
     pdf.add_page()
-    # Título del PDF
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(190, 10, "Servicios por Vencer - Banfield", ln=True, align="C")
+    pdf.cell(190, 10, "Lista de Gestion Loop - Banfield", ln=True, align="C")
     pdf.ln(10)
     
     pdf.set_font("Arial", "B", 9)
@@ -61,31 +53,38 @@ def generar_pdf(df_print):
         pdf.cell(25, 7, str(row['Nivel de PB'])[:12], 1)
         pdf.cell(55, 7, "", 1, 1)
     
-    return pdf.output()
+    # LA SOLUCIÓN: Convertir explícitamente a bytes
+    return bytes(pdf.output())
 
-# --- EJECUCIÓN ---
+# --- INICIO ---
 try:
-    # Intentar mostrar el logo también dentro de la app (opcional, si te gusta)
     if os.path.exists("banfield.ico"):
-        st.image("banfield.ico", width=15)
+        st.image("banfield.ico", width=60)
         
-    st.title("Sistema de Gestión Loop (Turbo)")
-
     df_base, df_servicios = load_data()
-    # Lectura de memoria (Google Sheets)
-    df_memoria = conn.read(ttl=0)
+    
+    # Intentar leer memoria
+    try:
+        df_memoria = conn.read(ttl=0)
+    except:
+        df_memoria = pd.DataFrame()
+
+    # Si el Sheet está vacío o no tiene columnas, creamos una estructura base
+    if df_memoria.empty or 'No de PB' not in df_memoria.columns:
+        df_memoria = pd.DataFrame(columns=['No de PB', 'Contactado', 'Agendado', 'Notas'])
     
     df_maestro = pd.merge(df_base, df_memoria, on="No de PB", how="left")
     df_maestro[['Contactado', 'Agendado']] = df_maestro[['Contactado', 'Agendado']].fillna(False)
     df_maestro['Notas'] = df_maestro['Notas'].fillna("")
 
+    st.title("Sistema de Gestión Loop")
 
     with st.sidebar:
         st.header("🔍 Filtros")
         hoy = datetime.now().date()
-        rango = st.date_input("Intervalo de Fechas:", value=(hoy, hoy + timedelta(days=30)))
+        rango = st.date_input("Vencimientos:", value=(hoy, hoy + timedelta(days=30)))
         servs_sel = st.multiselect("Servicios:", sorted(df_servicios['Descripción'].unique().tolist()))
-        if st.button("🔄 Sincronizar"):
+        if st.button("🔄 Refrescar"):
             st.cache_data.clear()
             st.rerun()
 
@@ -99,31 +98,32 @@ try:
 
     col_t, col_p = st.columns([3, 1])
     with col_t:
-        st.subheader(f"📋 Lista para Gestión ({len(res)})")
+        st.subheader(f"📋 Registros Encontrados ({len(res)})")
     with col_p:
         if not res.empty:
+            # Aquí llamamos a la función corregida
             pdf_bytes = generar_pdf(res)
-            st.download_button("📥 Descargar PDF", data=pdf_bytes, file_name="lista_loop_banfield.pdf")
+            st.download_button("📥 PDF de Gestión", data=pdf_bytes, file_name="gestion_banfield.pdf", mime="application/pdf")
 
     df_editado = st.data_editor(
         res[['Fecha de Vencimiento', 'Mascota', 'Propietario', 'Nivel de PB', 'Contactado', 'Agendado', 'Notas', 'No de PB']],
         column_config={
-            "Contactado": st.column_config.CheckboxColumn("📞 Contacto"),
-            "Agendado": st.column_config.CheckboxColumn("📅 Cita"),
-            "Notas": st.column_config.TextColumn("📝 Comentarios", width="large"),
+            "Contactado": st.column_config.CheckboxColumn("📞"),
+            "Agendado": st.column_config.CheckboxColumn("📅"),
+            "Notas": st.column_config.TextColumn("Notas de Atención", width="large"),
             "No de PB": st.column_config.TextColumn("ID", disabled=True),
         },
         disabled=['Fecha de Vencimiento', 'Mascota', 'Propietario', 'Nivel de PB'],
-        hide_index=True, use_container_width=True, key="editor"
+        hide_index=True, use_container_width=True, key="editor_v2"
     )
 
-    if st.button("💾 GUARDAR GESTIÓN", type="primary"):
+    if st.button("💾 GUARDAR TODO EN LA NUBE", type="primary"):
         df_para_sh = df_editado[['No de PB', 'Contactado', 'Agendado', 'Notas']]
+        df_para_sh['No de PB'] = df_para_sh['No de PB'].astype(str)
         conn.update(data=df_para_sh)
-        st.success("✅ Guardado en Google Sheets.")
+        st.success("✅ Cambios sincronizados con Google Sheets.")
         st.cache_data.clear()
 
 except Exception as e:
     st.error(f"⚠️ Error detectado: {e}")
-    st.info("Revisa si el nombre del Excel es exacto o si el Google Sheet tiene las columnas correctas.")
-    
+
