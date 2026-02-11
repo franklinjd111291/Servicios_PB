@@ -84,7 +84,7 @@ def generar_pdf(df_print):
 
 try:
     if os.path.exists("banfield mexico logo.svg"):
-        st.sidebar.image("banfield mexico logo.svg", width=120)
+        st.sidebar.image("banfield mexico logo.svg", width=360)
 
     df_base, df_servicios = load_data()
     
@@ -198,5 +198,6 @@ try:
 
 except Exception as e:
     st.error(f"⚠️ Error: {e}")
+
 
 
