@@ -5,96 +5,66 @@ import os
 from datetime import datetime, timedelta
 from fpdf import FPDF
 
-# 1. Configuración de página
-try:
-    st.set_page_config(page_title="Servicios de PB Banfield México", layout="wide", page_icon="banfield.ico")
-except:
-    st.set_page_config(page_title="Servicios de PB Banfield México", layout="wide", page_icon="🐾")
+# --- CLASE PERSONALIZADA PARA EL PDF ---
+class PDF(FPDF):
+    def __init__(self, rango, servs_sel):
+        super().__init__()
+        self.rango = rango
+        self.servs_sel = servs_sel
 
-# --- ESTILOS CSS PARA INTERFAZ COMPACTA Y LETRA PEQUEÑA ---
-st.markdown("""
-    <style>
-    /* 1. Títulos y métricas pequeños */
-    h1 { font-size: 22px !important; font-weight: bold !important; color: #004a99 !important; }
-    h3 { font-size: 18px !important; }
-    [data-testid="stMetricValue"] { font-size: 18px !important; }
-    [data-testid="stMetricLabel"] { font-size: 14px !important; }
+    def header(self):
+        # Título Principal
+        self.set_font("Arial", "B", 14)
+        self.cell(190, 10, "Lista de Gestion de PB - Banfield Mexico", ln=True, align="C")
+        
+        # Bloque de Filtros
+        self.set_font("Arial", "", 9)
+        self.set_text_color(50, 50, 50)
+        
+        # 1. Fechas
+        if isinstance(self.rango, tuple) and len(self.rango) == 2:
+            f_inicio = self.rango[0].strftime('%d/%m/%Y')
+            f_fin = self.rango[1].strftime('%d/%m/%Y')
+            self.cell(190, 7, f"Periodo seleccionado: del {f_inicio} al {f_fin}", ln=True)
+        
+        # 2. Servicios
+        if self.servs_sel:
+            texto_servicios = "Servicios filtrados: " + ", ".join(self.servs_sel)
+            self.multi_cell(190, 6, texto_servicios)
+        else:
+            self.cell(190, 7, "Servicios: Todos los disponibles", ln=True)
+        
+        self.ln(4)
 
-    /* 2. MAGIA PARA EL MULTISELECT: Permitir que el texto se lea completo */
-    .stMultiSelect span {
-        white-space: normal !important; 
-        height: auto !important;
-    }
-    .stMultiSelect div[role="listbox"] div {
-        white-space: normal !important; 
-    }
-    
-    /* 3. Ajuste de tamaño de los menús */
-    .stMultiSelect div div div div { padding: 2px !important; font-size: 13px !important; }
-    div[data-testid="stDateInput"] > div { padding: 0px 5px !important; font-size: 14px !important; min-height: 30px !important; }
-    
-    /* 4. Caja de cliente compacta */
-    .cliente-box { padding: 10px; border-radius: 8px; background-color: #f8f9fa; border-left: 5px solid #004a99; margin-bottom: 10px; font-size: 14px; }
-    </style>
-    """, unsafe_allow_html=True)
+        # Encabezados de Tabla (Se repiten en cada hoja)
+        self.set_font("Arial", "B", 9)
+        self.set_fill_color(230, 230, 230)
+        self.set_text_color(0, 0, 0)
+        self.cell(25, 8, "Vencimiento", 1, 0, "C", True)
+        self.cell(30, 8, "No de PB", 1, 0, "C", True)
+        self.cell(30, 8, "Mascota", 1, 0, "C", True)
+        self.cell(50, 8, "Propietario", 1, 0, "C", True)
+        self.cell(55, 8, "Estatus/Notas", 1, 1, "C", True)
 
-conn = st.connection("gsheets", type=GSheetsConnection)
+    def footer(self):
+        # Número de página
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.cell(0, 10, f'Página {self.page_no()}', 0, 0, 'C')
 
-@st.cache_data(ttl=10)
-def load_data():
-    file = 'servicios por vencer 2026-1.xlsx'
-    df_s = pd.read_excel(file, sheet_name='Servicios Loop', engine='calamine')
-    df_s = df_s.rename(columns={'Fecha Fin': 'Fecha de Vencimiento', 'Nivel': 'Nivel de PB'})
-    
-    df_s['No de PB'] = df_s['No de PB'].astype(str).str.strip().str.upper()
-    
-    cols_base = ['No de PB', 'Mascota', 'Propietario', 'Fecha de Vencimiento', 'Nivel de PB']
-    df_base = df_s[cols_base].drop_duplicates(subset=['No de PB'])
-    
-    df_base['Fecha de Vencimiento'] = pd.to_datetime(df_base['Fecha de Vencimiento']).dt.date
-    return df_base, df_s
-
-# --- FUNCIÓN PDF MODIFICADA ---
 def generar_pdf(df_print, rango, servs_sel):
-    pdf = FPDF()
+    # Instanciar la clase personalizada
+    pdf = PDF(rango, servs_sel)
+    pdf.alias_nb_pages()
     pdf.add_page()
-    
-    # Título Principal
-    pdf.set_font("Arial", "B", 14)
-    pdf.cell(190, 10, "Lista de Gestion de PB - Banfield Mexico", ln=True, align="C")
-    
-    # Bloque de Filtros (Fechas y Servicios)
-    pdf.set_font("Arial", "", 9)
-    pdf.set_text_color(50, 50, 50)
-    
-    # 1. Fechas
-    if isinstance(rango, tuple) and len(rango) == 2:
-        f_inicio = rango[0].strftime('%d/%m/%Y')
-        f_fin = rango[1].strftime('%d/%m/%Y')
-        pdf.cell(190, 7, f"Periodo seleccionado: del {f_inicio} al {f_fin}", ln=True)
-    
-    # 2. Servicios (Uso de multi_cell por si son nombres largos)
-    if servs_sel:
-        texto_servicios = "Servicios filtrados: " + ", ".join(servs_sel)
-        pdf.multi_cell(190, 6, texto_servicios)
-    else:
-        pdf.cell(190, 7, "Servicios: Todos los disponibles", ln=True)
-    
-    pdf.ln(4) # Espacio antes de la tabla
-
-    # Encabezados de Tabla
-    pdf.set_font("Arial", "B", 9)
-    pdf.set_fill_color(230, 230, 230)
-    pdf.set_text_color(0, 0, 0)
-    pdf.cell(25, 8, "Vencimiento", 1, 0, "C", True)
-    pdf.cell(30, 8, "No de PB", 1, 0, "C", True)
-    pdf.cell(30, 8, "Mascota", 1, 0, "C", True)
-    pdf.cell(50, 8, "Propietario", 1, 0, "C", True)
-    pdf.cell(55, 8, "Estatus/Notas", 1, 1, "C", True)
     
     # Datos de la Tabla
     pdf.set_font("Arial", "", 8)
     for _, row in df_print.iterrows():
+        # Verificación de salto de página automático para mantener el estilo
+        if pdf.get_y() > 260:
+            pdf.add_page()
+            
         fecha_formateada = row['Fecha de Vencimiento'].strftime('%d/%m/%Y')
         pdf.cell(25, 7, fecha_formateada, 1)
         pdf.cell(30, 7, str(row['No de PB']), 1)
@@ -104,7 +74,43 @@ def generar_pdf(df_print, rango, servs_sel):
         
     return bytes(pdf.output())
 
+# --- RESTO DEL CÓDIGO (Sin cambios) ---
+
 try:
+    # 1. Configuración de página
+    try:
+        st.set_page_config(page_title="Servicios de PB Banfield México", layout="wide", page_icon="banfield.ico")
+    except:
+        st.set_page_config(page_title="Servicios de PB Banfield México", layout="wide", page_icon="🐾")
+
+    # --- ESTILOS CSS ---
+    st.markdown("""
+        <style>
+        h1 { font-size: 22px !important; font-weight: bold !important; color: #004a99 !important; }
+        h3 { font-size: 18px !important; }
+        [data-testid="stMetricValue"] { font-size: 12px !important; }
+        [data-testid="stMetricLabel"] { font-size: 12px !important; }
+        .stMultiSelect span { white-space: normal !important; height: auto !important; }
+        .stMultiSelect div[role="listbox"] div { white-space: normal !important; }
+        .stMultiSelect div div div div { padding: 2px !important; font-size: 13px !important; }
+        div[data-testid="stDateInput"] > div { padding: 0px 5px !important; font-size: 12px !important; min-height: 12px !important; }
+        .cliente-box { padding: 10px; border-radius: 8px; background-color: #f8f9fa; border-left: 5px solid #004a99; margin-bottom: 10px; font-size: 12px; }
+        </style>
+        """, unsafe_allow_html=True)
+
+    conn = st.connection("gsheets", type=GSheetsConnection)
+
+    @st.cache_data(ttl=10)
+    def load_data():
+        file = 'servicios por vencer 2026-1.xlsx'
+        df_s = pd.read_excel(file, sheet_name='Servicios Loop', engine='calamine')
+        df_s = df_s.rename(columns={'Fecha Fin': 'Fecha de Vencimiento', 'Nivel': 'Nivel de PB'})
+        df_s['No de PB'] = df_s['No de PB'].astype(str).str.strip().str.upper()
+        cols_base = ['No de PB', 'Mascota', 'Propietario', 'Fecha de Vencimiento', 'Nivel de PB']
+        df_base = df_s[cols_base].drop_duplicates(subset=['No de PB'])
+        df_base['Fecha de Vencimiento'] = pd.to_datetime(df_base['Fecha de Vencimiento']).dt.date
+        return df_base, df_s
+
     if os.path.exists("banfield mexico logo.svg"):
         st.sidebar.image("banfield mexico logo.svg", width=360)
 
@@ -142,15 +148,12 @@ try:
         if not perfil.empty:
             row = perfil.iloc[0]
             st.title(f"🐶🐱 Mascota: {row['Mascota']}")
-            
             c1, c2, c3 = st.columns(3)
-            with c1: 
-                st.metric("Vencimiento", row['Fecha de Vencimiento'].strftime('%d/%m/%Y'))
+            with c1: st.metric("Vencimiento", row['Fecha de Vencimiento'].strftime('%d/%m/%Y'))
             with c2: st.metric("Plan", row['Nivel de PB'])
             with c3: st.metric("No de PB", row['No de PB'])
             
             st.markdown(f'<div class="cliente-box"><b>Propietario:</b> {row["Propietario"]}</div>', unsafe_allow_html=True)
-            
             st.subheader("📋 Servicios Disponibles")
             serv_ind = df_servicios[df_servicios['No de PB'] == pb_input][['Descripción', 'Cantidad']]
             st.dataframe(serv_ind, use_container_width=True, hide_index=True)
@@ -186,7 +189,6 @@ try:
             st.subheader(f"📋 Lista para Atención ({len(res)})")
         with col_p:
             if not res.empty:
-                # --- CAMBIO: PASAMOS LOS FILTROS AL GENERAR EL PDF ---
                 pdf_bytes = generar_pdf(res, rango, servs_sel)
                 st.download_button("📥 Generar PDF", data=pdf_bytes, file_name="lista_banfield.pdf", mime="application/pdf")
 
@@ -195,11 +197,7 @@ try:
         df_editado = st.data_editor(
             res[columnas_ordenadas],
             column_config={
-                "Fecha de Vencimiento": st.column_config.DateColumn(
-                    "Vencimiento",
-                    format="DD/MM/YYYY",
-                    disabled=True
-                ),
+                "Fecha de Vencimiento": st.column_config.DateColumn("Vencimiento", format="DD/MM/YYYY", disabled=True),
                 "No de PB": st.column_config.TextColumn("No de PB", disabled=True),
                 "Contactado": st.column_config.CheckboxColumn("📞"),
                 "Agendado": st.column_config.CheckboxColumn("📅"),
@@ -208,7 +206,7 @@ try:
                 "Propietario": st.column_config.TextColumn(disabled=True),
                 "Nivel de PB": st.column_config.TextColumn(disabled=True),
             },
-            hide_index=True, use_container_width=True, key="editor_final_banfield"
+            hide_index=True, use_container_width=True, key="editor_final_V4"
         )
 
         if st.button("💾 GUARDAR CAMBIOS", type="primary"):
