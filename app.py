@@ -12,7 +12,6 @@ except:
     st.set_page_config(page_title="Servicios de PB Banfield México", layout="wide", page_icon="🐾")
 
 # --- ESTILOS CSS PARA INTERFAZ COMPACTA Y LETRA PEQUEÑA ---
-# --- CSS MEJORADO PARA LEGIBILIDAD DE SERVICIOS ---
 st.markdown("""
     <style>
     /* 1. Títulos y métricas pequeños */
@@ -23,11 +22,11 @@ st.markdown("""
 
     /* 2. MAGIA PARA EL MULTISELECT: Permitir que el texto se lea completo */
     .stMultiSelect span {
-        white-space: normal !important; /* Permite saltos de línea en las etiquetas seleccionadas */
+        white-space: normal !important; 
         height: auto !important;
     }
     .stMultiSelect div[role="listbox"] div {
-        white-space: normal !important; /* Permite saltos de línea en el menú desplegable */
+        white-space: normal !important; 
     }
     
     /* 3. Ajuste de tamaño de los menús */
@@ -47,39 +46,62 @@ def load_data():
     df_s = pd.read_excel(file, sheet_name='Servicios Loop', engine='calamine')
     df_s = df_s.rename(columns={'Fecha Fin': 'Fecha de Vencimiento', 'Nivel': 'Nivel de PB'})
     
-    # Normalización del ID para 5501-V
     df_s['No de PB'] = df_s['No de PB'].astype(str).str.strip().str.upper()
     
     cols_base = ['No de PB', 'Mascota', 'Propietario', 'Fecha de Vencimiento', 'Nivel de PB']
     df_base = df_s[cols_base].drop_duplicates(subset=['No de PB'])
     
-    # Mantenemos el objeto fecha para cálculos, pero lo formatearemos al mostrar
     df_base['Fecha de Vencimiento'] = pd.to_datetime(df_base['Fecha de Vencimiento']).dt.date
     return df_base, df_s
 
-def generar_pdf(df_print):
+# --- FUNCIÓN PDF MODIFICADA ---
+def generar_pdf(df_print, rango, servs_sel):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(190, 10, "Lista de Gestion de PB - Banfield México", ln=True, align="C")
-    pdf.ln(10)
+    
+    # Título Principal
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(190, 10, "Lista de Gestion de PB - Banfield Mexico", ln=True, align="C")
+    
+    # Bloque de Filtros (Fechas y Servicios)
+    pdf.set_font("Arial", "", 9)
+    pdf.set_text_color(50, 50, 50)
+    
+    # 1. Fechas
+    if isinstance(rango, tuple) and len(rango) == 2:
+        f_inicio = rango[0].strftime('%d/%m/%Y')
+        f_fin = rango[1].strftime('%d/%m/%Y')
+        pdf.cell(190, 7, f"Periodo seleccionado: del {f_inicio} al {f_fin}", ln=True)
+    
+    # 2. Servicios (Uso de multi_cell por si son nombres largos)
+    if servs_sel:
+        texto_servicios = "Servicios filtrados: " + ", ".join(servs_sel)
+        pdf.multi_cell(190, 6, texto_servicios)
+    else:
+        pdf.cell(190, 7, "Servicios: Todos los disponibles", ln=True)
+    
+    pdf.ln(4) # Espacio antes de la tabla
+
+    # Encabezados de Tabla
     pdf.set_font("Arial", "B", 9)
     pdf.set_fill_color(230, 230, 230)
-    pdf.cell(25, 8, "Vencimiento", 1, 0, "C", True) # Un poco más ancho para el formato dd/mm/aaaa
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(25, 8, "Vencimiento", 1, 0, "C", True)
     pdf.cell(30, 8, "No de PB", 1, 0, "C", True)
     pdf.cell(30, 8, "Mascota", 1, 0, "C", True)
     pdf.cell(50, 8, "Propietario", 1, 0, "C", True)
     pdf.cell(55, 8, "Estatus/Notas", 1, 1, "C", True)
     
+    # Datos de la Tabla
     pdf.set_font("Arial", "", 8)
     for _, row in df_print.iterrows():
-        # CAMBIO: Formato de fecha en el PDF (Día/Mes/Año)
         fecha_formateada = row['Fecha de Vencimiento'].strftime('%d/%m/%Y')
         pdf.cell(25, 7, fecha_formateada, 1)
         pdf.cell(30, 7, str(row['No de PB']), 1)
         pdf.cell(30, 7, str(row['Mascota'])[:15], 1)
         pdf.cell(50, 7, str(row['Propietario'])[:25], 1)
         pdf.cell(55, 7, "", 1, 1)
+        
     return bytes(pdf.output())
 
 try:
@@ -123,7 +145,6 @@ try:
             
             c1, c2, c3 = st.columns(3)
             with c1: 
-                # CAMBIO: Formato de fecha en métrica individual
                 st.metric("Vencimiento", row['Fecha de Vencimiento'].strftime('%d/%m/%Y'))
             with c2: st.metric("Plan", row['Nivel de PB'])
             with c3: st.metric("No de PB", row['No de PB'])
@@ -165,7 +186,8 @@ try:
             st.subheader(f"📋 Lista para Atención ({len(res)})")
         with col_p:
             if not res.empty:
-                pdf_bytes = generar_pdf(res)
+                # --- CAMBIO: PASAMOS LOS FILTROS AL GENERAR EL PDF ---
+                pdf_bytes = generar_pdf(res, rango, servs_sel)
                 st.download_button("📥 Generar PDF", data=pdf_bytes, file_name="lista_banfield.pdf", mime="application/pdf")
 
         columnas_ordenadas = ['Fecha de Vencimiento', 'Mascota', 'Propietario', 'Nivel de PB', 'No de PB', 'Contactado', 'Agendado', 'Notas']
@@ -173,7 +195,6 @@ try:
         df_editado = st.data_editor(
             res[columnas_ordenadas],
             column_config={
-                # CAMBIO: Configuración de la columna de fecha para ver Día/Mes/Año
                 "Fecha de Vencimiento": st.column_config.DateColumn(
                     "Vencimiento",
                     format="DD/MM/YYYY",
@@ -198,6 +219,5 @@ try:
 
 except Exception as e:
     st.error(f"⚠️ Error: {e}")
-
 
 
