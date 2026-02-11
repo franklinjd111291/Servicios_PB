@@ -42,7 +42,7 @@ def generar_pdf(df_print):
     pdf.add_page()
     # Título del PDF
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(190, 10, "Lista de Gestión Loop - Banfield", ln=True, align="C")
+    pdf.cell(190, 10, "Servicios por Vencer - Banfield", ln=True, align="C")
     pdf.ln(10)
     
     pdf.set_font("Arial", "B", 9)
@@ -67,7 +67,7 @@ def generar_pdf(df_print):
 try:
     # Intentar mostrar el logo también dentro de la app (opcional, si te gusta)
     if os.path.exists("banfield.ico"):
-        st.image("banfield.ico", width=150)
+        st.image("banfield.ico", width=15)
         
     st.title("Sistema de Gestión Loop (Turbo)")
 
@@ -124,4 +124,6 @@ try:
         st.cache_data.clear()
 
 except Exception as e:
-    st.info("Esperando configuración de archivos y conexión...")
+    st.error(f"⚠️ Error detectado: {e}")
+    st.info("Revisa si el nombre del Excel es exacto o si el Google Sheet tiene las columnas correctas.")
+    
