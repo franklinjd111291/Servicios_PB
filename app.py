@@ -12,14 +12,29 @@ except:
     st.set_page_config(page_title="Servicios de PB Banfield México", layout="wide", page_icon="🐾")
 
 # --- ESTILOS CSS PARA INTERFAZ COMPACTA Y LETRA PEQUEÑA ---
+# --- CSS MEJORADO PARA LEGIBILIDAD DE SERVICIOS ---
 st.markdown("""
     <style>
+    /* 1. Títulos y métricas pequeños */
     h1 { font-size: 22px !important; font-weight: bold !important; color: #004a99 !important; }
     h3 { font-size: 18px !important; }
     [data-testid="stMetricValue"] { font-size: 18px !important; }
     [data-testid="stMetricLabel"] { font-size: 14px !important; }
-    .stMultiSelect div div div div { padding: 1px !important; font-size: 13px !important; }
+
+    /* 2. MAGIA PARA EL MULTISELECT: Permitir que el texto se lea completo */
+    .stMultiSelect span {
+        white-space: normal !important; /* Permite saltos de línea en las etiquetas seleccionadas */
+        height: auto !important;
+    }
+    .stMultiSelect div[role="listbox"] div {
+        white-space: normal !important; /* Permite saltos de línea en el menú desplegable */
+    }
+    
+    /* 3. Ajuste de tamaño de los menús */
+    .stMultiSelect div div div div { padding: 2px !important; font-size: 13px !important; }
     div[data-testid="stDateInput"] > div { padding: 0px 5px !important; font-size: 14px !important; min-height: 30px !important; }
+    
+    /* 4. Caja de cliente compacta */
     .cliente-box { padding: 10px; border-radius: 8px; background-color: #f8f9fa; border-left: 5px solid #004a99; margin-bottom: 10px; font-size: 14px; }
     </style>
     """, unsafe_allow_html=True)
@@ -183,3 +198,4 @@ try:
 
 except Exception as e:
     st.error(f"⚠️ Error: {e}")
+
